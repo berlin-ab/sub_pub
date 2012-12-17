@@ -94,23 +94,49 @@ describe SubPub do
   end
 
   describe "normal pubsub with a configured scope" do
-    before do
-      SubPub.scope = 'foo-bar'
 
-      class CreateAccountSubscriber < SubPub::Subscriber
-        subscribe_to("new_account_posted")
+    context "normal case" do
+      before do
+        SubPub.scope = 'foo-bar'
 
-        def on_publish
-          FakeActiveRecordUser.create(title: options[:title])
+        class CreateAccountSubscriber < SubPub::Subscriber
+          subscribe_to("new_account_posted")
+
+          def on_publish
+            FakeActiveRecordUser.create(title: options[:title])
+          end
         end
+      end
+
+      it "calls the subscriber properly" do
+        FakeActiveRecordUser.all.size.should == 0
+        SubPub.publish("new_account_posted", {title: 'foo'})
+        FakeActiveRecordUser.all.size.should == 1
+        FakeActiveRecordUser.all.first.title.should == 'foo'
       end
     end
 
-    it "calls the subscriber properly" do
-      FakeActiveRecordUser.all.size.should == 0
-      SubPub.publish("new_account_posted", {title: 'foo'})
-      FakeActiveRecordUser.all.size.should == 1
-      FakeActiveRecordUser.all.first.title.should == 'foo'
+
+    context "when changing the scope after some subscriptions" do
+      it "does not change the scope of previous subscriptions" do
+        FakeActiveRecordUser.all.size.should == 0
+
+        SubPub.scope = 'foo-bar'
+
+        SubPub.subscribe('new_account_posted') do
+          FakeActiveRecordUser.create(title: 'foo')
+        end
+
+        SubPub.scope = 'foo-baz'
+
+        SubPub.subscribe('new_account_posted') do
+          FakeActiveRecordUser.create(title: 'bar')
+        end
+
+        SubPub.publish("new_account_posted", {title: 'foo'})
+
+        FakeActiveRecordUser.all.size.should == 2
+      end
     end
   end
 
